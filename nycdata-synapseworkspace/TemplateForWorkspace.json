@@ -1,0 +1,137 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "nycdata-synapseworkspace"
+		},
+		"nycdata-synapseworkspace-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'nycdata-synapseworkspace-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:nycdata-synapseworkspace.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"bing-covid-19-data_sasUri": {
+			"type": "secureString",
+			"metadata": "Secure string for 'sasUri' of 'bing-covid-19-data'"
+		},
+		"nycdata-synapseworkspace-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://adlsnyctaxidata.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/bing-covid-19-data')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobStorage",
+				"typeProperties": {
+					"sasUri": "[parameters('bing-covid-19-data_sasUri')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nycdata-synapseworkspace-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('nycdata-synapseworkspace-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/nycdata-synapseworkspace-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('nycdata-synapseworkspace-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/1_Explore_Taxi_Zone')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"folder": {
+					"name": "NYC_Taxi/Data Discovery"
+				},
+				"content": {
+					"query": "-- This is auto-generated code\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        HEADER_ROW= TRUE,\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n'\n    ) AS [result]\n\n\n\n-- Examining data types\n\nEXEC sp_describe_first_result_set N'SELECT\n    TOP 100 *\n    FROM\n    OPENROWSET(\n        BULK ''https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv'',\n        FORMAT = ''CSV'',\n        PARSER_VERSION = ''2.0'',\n        HEADER_ROW= TRUE\n    ) AS [result]'\n\n\n-- Use WiTH clause to provide explicit data types\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        HEADER_ROW= TRUE,\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n'\n    )\n    WITH(\n    LocationID SMALLINT,\n    Borough VARCHAR(15),\n    Zone VARCHAR(50),\n    service_zone VARCHAR(15)\n       ) \n    AS [result]\n\n\n-- Specifying UTF-8 collation for indivizual column names\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        HEADER_ROW= TRUE,\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n'\n    )\n    WITH(\n    LocationID SMALLINT,\n    Borough VARCHAR(15) COLLATE Latin1_General_100_CI_AI_SC_UTF8,\n    Zone VARCHAR(50) COLLATE Latin1_General_100_CI_AI_SC_UTF8,\n    service_zone VARCHAR(15) COLLATE Latin1_General_100_CI_AI_SC_UTF8\n       ) \n    AS [result]\n\nCREATE DATABASE nyc_taxi_discovery;\nUSE nyc_taxi_discovery;\n\n-- Specifying UTF-8 collation to DATABASE Level\nALTER DATABASE nyc_taxi_discovery COLLATE Latin1_General_100_CI_AI_SC_UTF8;\n\n\nSELECT NAME, COLLATION_NAME FROM SYS.DATABASES;\n\n-- SELECTING COLUMNS AFTER APPLYING COLLATON TO DATABASE LEVEL\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        HEADER_ROW= TRUE,\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n'\n    )\n    WITH(\n    LocationID SMALLINT,\n    Borough VARCHAR(15),\n    Zone VARCHAR(50) ,\n    service_zone VARCHAR(15)\n    ) \n    AS [result]\n\n\n\n-- SELECT ONLY SUBSET OF COLOUMNS\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone_without_header.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n',\n        FIRSTROW = 1\n    )\n    WITH(\n    location_id bigint 1,\n    borough VARCHAR(15) 2,\n    zone VARCHAR(50) 3,\n    service_zone VARCHAR(15) 4\n    ) \n    AS [result]\n\n-- create external data source ---------------------------------------------------------\n\n/*CREATE EXTERNAL DATA SOURCE adlsnyctaxidataEDS\nWITH(\n    LOCATION= 'https://adlsnyctaxidata.dfs.core.windows.net/'\n)*/\n\nDROP EXTERNAL DATA SOURCE adlsnyctaxidataEDS;\n\n\nCREATE EXTERNAL DATA SOURCE adlsnyctaxidataEDS_raw\nWITH(\n    LOCATION= 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/'\n)\n\n-----------------------------------------------------------------------------------------\n/*SELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsnyctaxidata.dfs.core.windows.net/nyc-taxi-data/raw/taxi_zone.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        HEADER_ROW= TRUE,\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n'\n    )\n    WITH(\n    LocationID SMALLINT,\n    Borough VARCHAR(15),\n    Zone VARCHAR(50) ,\n    service_zone VARCHAR(15)\n    ) \n    AS [result]\n\n*/\n\n-- Using External Data Source instead of direct URL\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK '/taxi_zone_without_header.csv',\n        DATA_SOURCE='adlsnyctaxidataEDS_raw',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0',\n        FIELDTERMINATOR=',',\n        ROWTERMINATOR='\\n',\n        FIRSTROW = 1\n    )\n    WITH(\n    location_id bigint 1,\n    borough VARCHAR(15) 2,\n    zone VARCHAR(50) 3,\n    service_zone VARCHAR(15) 4\n    ) \n    AS [result]\n\n    \n-- How to knwo the location for External Data Source\nSELECT name, location from sys.external_data_sources;\n\n  ",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "nyc_taxi_discovery",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		}
+	]
+}
